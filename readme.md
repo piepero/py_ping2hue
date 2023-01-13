@@ -11,3 +11,6 @@ Since we are currently suffering from a unreliable internet connection, the phra
 To easier answer this question, I have whipped up this little script that pings a server and colors one of our Philips Hue lights based on the current response time.
 
 I try to keep the script both fairly straightforward to help people who want to base their own code on this example, and sufficiently flexible to make it useful on its own.
+
+# Get started
+
