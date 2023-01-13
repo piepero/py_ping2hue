@@ -1,0 +1,16 @@
+# Sample configuration file
+#
+# Rename to config.toml and change as necessary
+[bridge]
+host = "MY_HUE_BRIDGE"  # or IP
+api_key = "my secret API key" # see https://developers.meethue.com/develop/get-started-2/
+
+[ping]
+host = "google.com"
+
+[lights]
+ids = [1, 2]
+
+[ping_range]
+green = 0.04  # seconds
+red = 0.50  # seconds
