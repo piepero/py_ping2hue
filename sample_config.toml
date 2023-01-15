@@ -1,16 +1,32 @@
 # Sample configuration file
 #
 # Rename to config.toml and change as necessary
+
+#
+# Philips Hue bridge and API key
+# see https://developers.meethue.com/develop/get-started-2/
+#
 [bridge]
-host = "MY_HUE_BRIDGE"  # or IP
+host = "MY_HUE_BRIDGE"  # HOSTNAME or IP of the Hue bridge
 api_key = "my secret API key" # see https://developers.meethue.com/develop/get-started-2/
 
+#
+# the host that is pinged
+#
 [ping]
 host = "google.com"
 
+#
+# the numeric light ids of the lamps
+#
 [lights]
 ids = [1, 2]
 
+#
+# ping range
+# pings of {green} seconds or better will be colored green
+# pings of {red} seconds or worse will be colored red
+#
 [ping_range]
 green = 0.04  # seconds
 red = 0.50  # seconds

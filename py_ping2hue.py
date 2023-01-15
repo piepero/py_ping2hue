@@ -1,4 +1,10 @@
-import os
+"""py_ping2hue.py
+
+Keep pinging a host machine and color one or more
+Philips Hue lights according to the outcome.
+"""
+
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 
@@ -25,49 +31,72 @@ HUE_VAL_GREEN = (65535 // 3) + 3000  # green, shifted 3000 towards cyan
 HUE_VAL_RED = 0
 
 
-def calculate_quality(response_time: float) -> float:
-    """Calculate ping quality (float from 1.0 to 0.0) from the response_time.
+@dataclass
+class MultiPingResult:
+    """Result of multiple pings."""
 
-    The quality is 1.0 for pings of PING_GREEN or better,
-    0.0 for pings of PING_RED or worse,
-    and a linear value from 1.0 to 0.0 in between."""
-    if response_time <= PING_GREEN:
-        return 1.0
-    if response_time >= PING_RED:
-        return 0.0
-    return 1 - (response_time - PING_GREEN) / (PING_RED - PING_GREEN)
+    ping_attempts: int
+    mean_response_time: float
+    lost_packets: int
 
 
-def update_lights(hue_val: int, hue_bri: int) -> None:
-    """Send the new hue value to all configured lights.
+def calculate_quality(ping_result: MultiPingResult) -> float:
+    """Calculate a ping quality (from 1.0 to 0.0) from the ping_result."""
 
-    The on/off state is not changed, so that the
-    light can be turned on and off independently.
-    """
+    # The quality is 1.0 for pings of PING_GREEN or better,
+    # 0.0 for pings of PING_RED or worse,
+    # and a linear value from 1.0 to 0.0 in between.
+    if ping_result.mean_response_time <= PING_GREEN:
+        quality = 1.0
+    elif ping_result.mean_response_time >= PING_RED:
+        quality = 0.0
+    else:
+        quality = 1 - (ping_result.mean_response_time - PING_GREEN) / (
+            PING_RED - PING_GREEN
+        )
 
-    for l_id in HUE_LIGHT_IDS:
-        url = f"http://{HUE_BRIDGE_ADDRESS}/api/{HUE_API_KEY}/lights/{l_id}/state"
-        data = {"hue": hue_val, "bri": hue_bri, "sat": 255}
+    # Then, for each packet loss, we halve the result.
+    for _ in range(ping_result.lost_packets):
+        quality *= 0.5
+
+    return quality
+
+
+def update_light(light: int, hue: int, bri: int) -> None:
+    """Set hue and brightness value to the selected light."""
+
+    url = f"http://{HUE_BRIDGE_ADDRESS}/api/{HUE_API_KEY}/lights/{light}/state"
+    data = {"hue": hue, "bri": bri, "sat": 255}
+    try:
         requests.put(url, json=data)
+    except (requests.ConnectionError, requests.Timeout):
+        pass
 
 
-def collect_pings(num_of_pings: int, sleep_time_s: float = 1):
-    """Collect num_of_pings pings and return the mean value."""
+def collect_pings(num_of_pings: int, sleep_time_s: float = 1) -> MultiPingResult:
+    """Collect num_of_pings pings and return the mean value and number of lost packets."""
+
     total_time = 0
     losses = 0
+
     for _ in range(num_of_pings):
+        sleep(sleep_time_s)
         p = ping(PING_HOST, timeout=1, unit="s")
-        # count packet losses like a "red ping"
         if not p:
             losses += 1
-            p = PING_RED
+            continue
         total_time += p
-        sleep(sleep_time_s)
-    mean_time = total_time / num_of_pings
-    logger.debug(
-        f"mean of {num_of_pings} pings with {losses} losses: {1000 * mean_time:.0f} ms"
+
+    if losses < num_of_pings:
+        mean_time = total_time / (num_of_pings - losses)
+    else:
+        mean_time = 9999  # all packets lost
+
+    return MultiPingResult(
+        ping_attempts=num_of_pings,
+        mean_response_time=mean_time,
+        lost_packets=losses,
     )
-    return mean_time
 
 
 def calc_hue(quality: float) -> int:
@@ -81,15 +110,29 @@ def calc_bri(quality: float) -> int:
 
     The better the quality, the lower the brightness.
     """
-    # TODO: make configurable
     return int(128 * (1 - quality))
 
 
 def main() -> None:
     """Main loop."""
+
     while True:
-        q = calculate_quality(collect_pings(5))
-        update_lights(calc_hue(q), calc_bri(q))
+
+        ping_result = collect_pings(5)
+
+        q = calculate_quality(ping_result)
+
+        new_hue = calc_hue(q)
+        new_bri = calc_bri(q)
+
+        logger.debug(
+            f"performed {ping_result.ping_attempts} pings "
+            f"with {ping_result.lost_packets} losses and a mean response time of {1000 * ping_result.mean_response_time:.0f} ms"
+            f" (hue={new_hue}, bri={new_bri})"
+        )
+
+        for l_id in HUE_LIGHT_IDS:
+            update_light(light=l_id, hue=new_hue, bri=new_bri)
 
 
 if __name__ == "__main__":
