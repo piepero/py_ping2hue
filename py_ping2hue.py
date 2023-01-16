@@ -25,6 +25,7 @@ HUE_LIGHT_IDS = cfg["lights"]["ids"]
 PING_HOST = cfg["ping"]["host"]
 PING_GREEN = cfg["ping_range"]["green"]
 PING_RED = cfg["ping_range"]["red"]
+PACKET_LOSS_FACTOR = cfg["ping_range"]["loss_factor"]
 
 # hue color values
 HUE_VAL_GREEN = (65535 // 3) + 3000  # green, shifted 3000 towards cyan
@@ -55,9 +56,9 @@ def calculate_quality(ping_result: MultiPingResult) -> float:
             PING_RED - PING_GREEN
         )
 
-    # Then, for each packet loss, we halve the result.
+    # Then, for each packet loss, we reduce the result by a configurable factor
     for _ in range(ping_result.lost_packets):
-        quality *= 0.5
+        quality *= PACKET_LOSS_FACTOR
 
     return quality
 

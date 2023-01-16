@@ -30,3 +30,5 @@ ids = [1, 2]
 [ping_range]
 green = 0.04  # seconds
 red = 0.50  # seconds
+# for each lost packet, reduce the result by this factor towards red
+loss_factor = 0.75
