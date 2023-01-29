@@ -5,17 +5,16 @@ Philips Hue lights according to the outcome.
 """
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from time import sleep
 
-import requests
+import tomllib
 from loguru import logger
 from ping3 import ping
 
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
+from schedfunc import SchedFunc
+from simplehue import SimpleHue
 
 cfg = tomllib.loads(Path("config.toml").read_text(encoding="utf-8"))
 # assign config values to "constants" to improve code legibility
@@ -63,19 +62,10 @@ def calculate_quality(ping_result: MultiPingResult) -> float:
     return quality
 
 
-def update_light(light: int, hue: int, bri: int) -> None:
-    """Set hue and brightness value to the selected light."""
-
-    url = f"http://{HUE_BRIDGE_ADDRESS}/api/{HUE_API_KEY}/lights/{light}/state"
-    data = {"hue": hue, "bri": bri, "sat": 255}
-    try:
-        requests.put(url, json=data)
-    except (requests.ConnectionError, requests.Timeout):
-        pass
-
-
 def collect_pings(num_of_pings: int, sleep_time_s: float = 1) -> MultiPingResult:
-    """Collect num_of_pings pings and return the mean value and number of lost packets."""
+    """Collect num_of_pings pings and return the mean value and number of lost
+    packets.
+    """
 
     total_time = 0
     losses = 0
@@ -114,10 +104,54 @@ def calc_bri(quality: float) -> int:
     return int(128 * (1 - quality))
 
 
+def init_on_off_scheduler(hue: SimpleHue) -> list[SchedFunc]:
+
+    if "auto_switch" not in cfg:
+        return list()
+
+    schedulers = list()
+
+    if "on" in cfg["auto_switch"]:
+        on_func = partial(hue.set_lights_state, HUE_LIGHT_IDS, {"on": True})
+        for event in cfg["auto_switch"]["on"]:
+            logger.debug(event)
+            schedulers.append(
+                SchedFunc(
+                    isoweekdays=event.get("isoweekdays", [1, 2, 3, 4, 5, 6]),
+                    hour=event["hour"],
+                    minute=event.get("minute", 0),
+                    second=event.get("second", 0),
+                    func=on_func,
+                )
+            )
+
+    if "off" in cfg["auto_switch"]:
+        off_func = partial(hue.set_lights_state, HUE_LIGHT_IDS, {"on": False})
+        for event in cfg["auto_switch"]["off"]:
+            schedulers.append(
+                SchedFunc(
+                    isoweekdays=event.get("isoweekdays", [1, 2, 3, 4, 5, 6]),
+                    hour=event["hour"],
+                    minute=event.get("minute", 0),
+                    second=event.get("second", 0),
+                    func=off_func,
+                )
+            )
+
+    return schedulers
+
+
 def main() -> None:
     """Main loop."""
 
+    my_hue = SimpleHue(HUE_BRIDGE_ADDRESS, HUE_API_KEY)
+
+    on_off_schedulers = init_on_off_scheduler(my_hue)
+
     while True:
+
+        for s in on_off_schedulers:
+            s.process()
 
         ping_result = collect_pings(5)
 
@@ -128,13 +162,16 @@ def main() -> None:
 
         logger.debug(
             f"performed {ping_result.ping_attempts} pings "
-            f"with {ping_result.lost_packets} losses and a mean response time of {1000 * ping_result.mean_response_time:.0f} ms"
+            f"with {ping_result.lost_packets} losses and "
+            f"a mean response time of {1000 * ping_result.mean_response_time:.0f} ms"
             f" (hue={new_hue}, bri={new_bri})"
         )
 
-        for l_id in HUE_LIGHT_IDS:
-            update_light(light=l_id, hue=new_hue, bri=new_bri)
+        new_state = {"hue": new_hue, "bri": new_bri, "sat": 255}
+
+        my_hue.set_lights_state(HUE_LIGHT_IDS, new_state)
 
 
 if __name__ == "__main__":
+    main()
     main()

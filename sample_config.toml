@@ -32,3 +32,32 @@ green = 0.04  # seconds
 red = 0.50  # seconds
 # for each lost packet, reduce the result by this factor towards red
 loss_factor = 0.75
+
+#
+# automatically turn lights on and off
+# 
+# Use the key "on" to specify a list of scheduled times to switch the
+# ping lights on, and the key "off" to specify the times to switch
+# them off
+#
+# Each list item is a dictionary with the mandatory key "hour" and
+# the optional keys "isoweekdays" (a list of integers), "minutes",
+# and "seconds" (both integers).
+# If "isoweekdays" is omitted, the event will trigger every day.
+# "minutes" and "seconds" default to zero.
+#
+[auto_switch]
+#
+# from monday (1) to friday (5) turn the ping lights on at 7:00,
+# on saturday and sunday, turn the lights on at 8:30
+#
+on = [
+    { isoweekdays = [1, 2, 3, 4, 5], hour = 7 },
+    { isoweekdays = [6, 7], hour = 8, minute = 30 },
+]
+#
+# on each day of the week, turn the ping lights off at 23:00
+#
+off = [
+    { hour = 23 },
+]

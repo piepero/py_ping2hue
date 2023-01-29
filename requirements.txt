@@ -1,5 +1,5 @@
-loguru==0.6.0
-ping3==4.0.4
+loguru
+ping3
 requests
 # for Python < 3.11 uncomment the following line:
 # tomli
